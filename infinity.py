@@ -1,6 +1,7 @@
 import pygame as pg
-import math
-import random as rand
+from math import atan2, cos
+from random import randint
+import matplotlib.pyplot as plt
 
 pg.init()
 
@@ -13,7 +14,7 @@ clock = pg.time.Clock()
 running = True
 
 class person(pg.sprite.Sprite):
-    def __init__(self, name, color, size_x, size_y, start_x, start_y, max_speed, accel, infinity_radius = 0.0):
+    def __init__(self, name, color, size_x, size_y, start_x, start_y, max_speed, accel, infinity_radius = 0.0, health = 100.0):
         super().__init__()
         
         self.image = pg.Surface((size_x, size_y))
@@ -35,6 +36,12 @@ class person(pg.sprite.Sprite):
         self.infinity_active = False
         self.infinity_radius = infinity_radius * PPM
         self.infinity_pos = self.rect.center
+        self.max_health = health
+        self.current_health = self.max_health
+        self.last_health = self.current_health
+
+        self.infinity_surface = pg.Surface((self.infinity_radius, self.infinity_radius), pg.SRCALPHA)
+        self.infinity_surface.fill((100, 100, 255, 60))
         
         self.move_timers = {"red": 0.0}
         self.move_cooldowns = {"red": 2.0}
@@ -97,61 +104,75 @@ class person(pg.sprite.Sprite):
     def activate_infinity(self, dt, other):
         keys = pg.key.get_pressed()
 
-        if keys[pg.K_e]:
-            self.infinity_active = True
-        else:
-            self.infinity_active = False
+        self.infinity_active = keys[pg.K_e]
 
-        length_vec = other.center_pos - self.center_pos
-        dist = length_vec.length()
+        dir = self.get_enemy_dir(other)
+        if dir.x < 0:
+            offset = pg.Vector2(other.rect.bottomright) - pg.Vector2(self.rect.bottomleft)
+        elif dir.x > 0:
+            offset = pg.Vector2(other.rect.bottomleft) - pg.Vector2(self.rect.bottomright)
+        else:
+            offset = pg.Vector2(0, 0)
+        dist = offset.length() / PPM
         
-        if dist <= self.infinity_radius and self.infinity_active:
-            self.calculate_infinity_slow_factor(dt, other, dist)
+        if dist <= self.infinity_radius / (2 * PPM) and self.infinity_active:
             other.in_infinity = True
+            self.calculate_infinity_slow_factor(dt, other, dist)
         else:
             other.in_infinity = False
-
-    def prevent_infinity_collision(self, enemy):
-        offset = enemy.center_pos - gojo.center_pos
-        distance = offset.length()
-
-        minimum_distance = (
-            max(gojo.rect.width, gojo.rect.height) / 2
-            + max(enemy.rect.width, enemy.rect.height) / 2
-        )
-
-        if distance < minimum_distance:
-            direction = offset.normalize() if distance > 0 else pg.Vector2(1, 0)
-            enemy.temp_velocity = pg.Vector2(0, 0)
-            return True
-
-        return False
+            other.temp_velocity = other.velocity.copy()
+        #print(f"Dist: {dist}, In infinity: {other.in_infinity}")
 
     def calculate_infinity_slow_factor(self, dt, other, dist):
-        ratio = dist / self.infinity_radius
-        ratio = pg.math.clamp(ratio, 1.0, 0.0)
+        infinity_radius = self.infinity_radius / PPM
+        min_dist = self.get_min_dist(other)
 
-        other.temp_velocity = other.velocity * ratio
 
-        if not self.prevent_infinity_collision(other):
+    # 0 at the minimum distance, 1 at the outer Infinity boundary
+        ratio = (dist - min_dist) / (infinity_radius / 2 - min_dist)
+        ratio = pg.math.clamp(ratio, 0.0, 1.0)
+
+        if dist < min_dist:
+            other.temp_velocity = pg.Vector2(0, 0)
+        else:
             other.temp_velocity = other.velocity * ratio
 
-    def red(self, other):
-        if self.move_timers["red"] >= self.move_cooldowns["red"]:
-            if other.rect.bottomleft < self.rect.bottomleft and other.velocity.x >= 0:
-                other.velocity.x *= -3
-            elif other.rect.bottomleft < self.rect.bottomleft and other.velocity.x < 0:
-                other.velocity.x *= 3
-            elif other.rect.bottomleft > self.rect.bottomleft and other.velocity.x >= 0:
-                other.velocity.x *= 3
-            else:
-                other.velocity.x *= -3 #also ADD VELOCITY ON TOP OF MULTIPLYING
+
+    def get_min_dist(self, enemy):
+        self_radius = max(self.rect.width, self.rect.height) / 2
+        enemy_radius = max(enemy.rect.width, enemy.rect.height) / 2
+
+        return ((self_radius + enemy_radius) / 4) / PPM #change /2 to increase/decrease stopping dist
+
+
+    def red(self, others):
+        for other in others:
+            if self.move_timers["red"] >= self.move_cooldowns["red"]:
+                if other.rect.bottomleft < self.rect.bottomleft and other.velocity.x >= 0:
+                    other.velocity.x *= -3
+                elif other.rect.bottomleft < self.rect.bottomleft and other.velocity.x < 0:
+                    other.velocity.x *= 3
+                elif other.rect.bottomleft > self.rect.bottomleft and other.velocity.x >= 0:
+                    other.velocity.x *= 3
+                else:
+                    other.velocity.x *= -3 #also ADD VELOCITY ON TOP OF MULTIPLYING
 
             self.move_timers["red"] = 0.0
 
+    def get_enemy_dir(self, other):
+        self_vec = pg.Vector2(self.rect.x, self.rect.y)
+        other_vec = pg.Vector2(other.rect.x, other.rect.y)
+
+        dir = other_vec - self_vec
+
+        if dir.length() > 0:
+            dir = dir.normalize()
+
+        return dir
+
 class enemy(person):
-    def __init__(self, name, color, size_x, size_y, start_x, start_y, max_speed, accel):
-        super().__init__(name, color, size_x, size_y, start_x, start_y, max_speed, accel)
+    def __init__(self, name, color, size_x, size_y, start_x, start_y, max_speed, accel, health = 100.0):
+        super().__init__(name, color, size_x, size_y, start_x, start_y, max_speed, accel, health)
         self.enemytype = ""
         self.in_infinity = False
         self.temp_velocity = self.velocity.copy()
@@ -162,9 +183,9 @@ class enemy(person):
         self.enemytype = types[choice]
 
         other_pos = other.position
-        other_dir = math.atan2((other.position.y - self.position.y), (other.position.x - self.position.x))
+        other_dir = atan2((other_pos.y - self.position.y), (other_pos.x - self.position.x))
         if not self.in_infinity:
-            self.velocity.x += self.acceleration_x * math.cos(other_dir) * dt
+            self.velocity.x += self.acceleration_x * cos(other_dir) * dt
             self.velocity.y += GRAVITY * dt
         #    self.velocity.x = pg.math.clamp(self.velocity.x, -self.max_speed_x, self.max_speed_x)
             self.temp_velocity = self.velocity.copy()
@@ -189,15 +210,19 @@ class enemy(person):
         if self.position.x <= 0.0 or self.position.x >= screen.get_width() - self.rect.width:
             if self.position.x <= 0.0:
                 self.position.x = 0.0
+                self.current_health = round(self.current_health - abs(self.velocity.x), 2)
             else:
                 self.position.x = screen.get_width() - self.rect.width
+                self.current_health = round(self.current_health - abs(self.velocity.x), 2)
+            self.current_health = pg.math.clamp(self.current_health, 0.0, self.max_health)
             self.velocity.x = 0.0
 
         self.rect.topleft = self.position
         self.center_pos = pg.Vector2(self.rect.center)
 
     def update(self, dt, other=None):
-        return super().update(dt, other)
+        self.update_pos(dt)
+        if not self.in_infinity: self.update_speed(dt, other)
 
 
 
@@ -208,10 +233,17 @@ gojo_name = "Gojo Satoru"
 
 enemy_group = pg.sprite.Group()
 
-gojo = person(gojo_name, "aqua", gojo_size_x, gojo_size_y, screen.get_width() / 2, screen.get_height() - gojo_size_y, 11.0, 4.5, 3)
-enemy1 = enemy("sus", "red", gojo_size_x, gojo_size_y, screen.get_width() / 2 - 5 * PPM, screen.get_height() / 2, 9.0, 3.0)
+gojo = person(gojo_name, "aqua", gojo_size_x, gojo_size_y, screen.get_width() / 2, screen.get_height() - gojo_size_y, 11.0, 4.5, 4)
+#enemy1 = enemy("sus", "red", gojo_size_x, gojo_size_y, screen.get_width() / 2 - 5 * PPM, screen.get_height() / 2, 50.0, 15.0)
 
-enemy_group.add(enemy1)
+for i in range(5):
+    enemy_clone = enemy("sus", "red", gojo_size_x, gojo_size_y, randint(0, int(screen.get_width() / (2 * PPM))), screen.get_height() / 2, 30.0, 8.0)
+    enemy_group.add(enemy_clone)
+
+total_time = 0
+
+enemy_velocity = []
+time = []
 
 while running:
     for event in pg.event.get():
@@ -219,7 +251,7 @@ while running:
             running = False
         if event.type == pg.KEYDOWN:
             if event.key == pg.K_r:
-                gojo.red(enemy1)
+                gojo.red(enemy_group)
     delta_time = clock.tick(60) / 1000
 
     screen.fill("grey")
@@ -227,21 +259,37 @@ while running:
     gojo.update(delta_time)
 
     for enemies in enemy_group:
+        if enemies.last_health != enemies.current_health: 
+            print(f"Enemy health: {enemies.current_health}")
+            enemies.last_health = enemies.current_health
+        if enemies.current_health <= 0.0:
+            enemy_group.remove(enemies)
+            pass
         gojo.activate_infinity(delta_time, enemies)
+        enemy_velocity.append(abs(enemies.temp_velocity.x))
+        time.append(total_time)
         #gojo.red(enemy)
-        print(f"""In infinity: {enemies.in_infinity}\nDistance to gojo (centers): {round(((pg.Vector2(enemies.center_pos).distance_to(pg.Vector2(gojo.center_pos))) / PPM), 3)}
-Temp velocity: {round(enemies.temp_velocity, 5)}\nReal velocity: {round(enemies.velocity, 5)}""")
-
+        #print(f"""In infinity: {enemies.in_infinity}\nDistance to gojo (centers): {round(((pg.Vector2(enemies.center_pos).distance_to(pg.Vector2(gojo.center_pos))) / PPM), 3)}
+        #Temp velocity: {round(enemies.temp_velocity, 5)}\nReal velocity: {round(enemies.velocity, 5)}""")
+        #print(f"Temp velocity: {round(enemies.temp_velocity, 5)}, Real velocity: {round(enemies.velocity, 5)}")
+        #print(f"{gojo.get_enemy_dir(enemies)}")
+        #print(f"{}")
+    
     enemy_group.update(delta_time, gojo)
+    
 
-    for enemies in enemy_group:
-        if enemies.in_infinity:
-            gojo.prevent_infinity_collision(enemies)
-
-    pg.draw.rect(screen, "brown", (gojo.center_pos.x - gojo.infinity_radius / 2, gojo.center_pos.y - gojo.infinity_radius / 2, gojo.infinity_radius, gojo.infinity_radius))
+    
+    screen.blit(gojo.infinity_surface, (gojo.center_pos.x - gojo.infinity_radius / 2, gojo.center_pos.y - gojo.infinity_radius / 2))
     pg.draw.rect(screen, gojo.color, gojo.rect)
     enemy_group.draw(screen)
     pg.display.flip()
+    total_time += delta_time
 
+plt.plot(time, enemy_velocity)
+plt.xlabel("Time (seconds)")
+plt.ylabel("Enemy velocity")
+plt.title("Enemy v vs t graph")
 
 pg.quit()
+
+plt.show()

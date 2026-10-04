@@ -1,7 +1,7 @@
 import pygame as pg
 from math import atan2, cos
-from random import randint
-import matplotlib.pyplot as plt
+from random import randint, uniform
+#import matplotlib.pyplot as plt
 
 pg.init()
 
@@ -9,7 +9,7 @@ PPM = 50 #pixels per meter
 
 GRAVITY = 9.81
 
-screen = pg.display.set_mode((20 * PPM, 13 * PPM))
+screen = pg.display.set_mode((21 * PPM, 16 * PPM))
 clock = pg.time.Clock()
 running = True
 
@@ -53,7 +53,7 @@ class person(pg.sprite.Sprite):
         keys = pg.key.get_pressed()
         if keys[pg.K_a]:
             self.velocity.x -= self.acceleration_x * dt
-        if keys[pg.K_w] and on_ground:
+        if keys[pg.K_w] or keys[pg.K_SPACE] and on_ground:
             self.velocity.y = -8.0
         if keys[pg.K_d]:
             self.velocity.x += self.acceleration_x * dt
@@ -144,20 +144,36 @@ class person(pg.sprite.Sprite):
 
         return ((self_radius + enemy_radius) / 4) / PPM #change /2 to increase/decrease stopping dist
 
+    def apply_red_knockback(self, other, force):
+        mult = 3
+        dir = self.get_enemy_dir(other)
+        if dir.x < 0 and other.velocity.x >= 0:
+            other.velocity.x *= -mult
+            #other.velocity.x += force / other.mass
+        elif dir.x < 0 and other.velocity.x < 0:
+            other.velocity.x *= mult
+            #other.velocity.x -= force / other.mass
+        elif dir.x > 0 and other.velocity.x >= 0:
+            other.velocity.x *= mult
+            #other.velocity.x += force / other.mass
+        elif dir.x > 0 and other.velocity.x < 0:
+            other.velocity.x *= -mult
+            #other.velocity.x -= force / other.mass
+        else:
+            other.velocity.x *= mult * 10
+            #other.velocity.x = force * 10 / other.mass
 
-    def red(self, others):
-        for other in others:
-            if self.move_timers["red"] >= self.move_cooldowns["red"]:
-                if other.rect.bottomleft < self.rect.bottomleft and other.velocity.x >= 0:
-                    other.velocity.x *= -3
-                elif other.rect.bottomleft < self.rect.bottomleft and other.velocity.x < 0:
-                    other.velocity.x *= 3
-                elif other.rect.bottomleft > self.rect.bottomleft and other.velocity.x >= 0:
-                    other.velocity.x *= 3
-                else:
-                    other.velocity.x *= -3 #also ADD VELOCITY ON TOP OF MULTIPLYING
-
+    def red(self, others, force):
+        if self.move_timers["red"] >= self.move_cooldowns["red"]:
+            if isinstance(others, enemy):
+                self.apply_red_knockback(others, force)
+            else:
+                for other in others:
+                    self.apply_red_knockback(other, force)
+        
             self.move_timers["red"] = 0.0
+        else:
+            print(f"Still on cooldown! Remaining time: {round(self.move_cooldowns["red"] - self.move_timers["red"], 2)}s")
 
     def get_enemy_dir(self, other):
         self_vec = pg.Vector2(self.rect.x, self.rect.y)
@@ -176,6 +192,7 @@ class enemy(person):
         self.enemytype = ""
         self.in_infinity = False
         self.temp_velocity = self.velocity.copy()
+        self.mass = size_x * size_y * 10.0
 
     def update_speed(self, dt, other=None):
         types = ("close range", "long range", "sorcerer")
@@ -225,19 +242,20 @@ class enemy(person):
         if not self.in_infinity: self.update_speed(dt, other)
 
 
-
-
 gojo_size_y = 1.5 * PPM
 gojo_size_x = .46 * PPM
 gojo_name = "Gojo Satoru"
+
+red_force = 100000.0
 
 enemy_group = pg.sprite.Group()
 
 gojo = person(gojo_name, "aqua", gojo_size_x, gojo_size_y, screen.get_width() / 2, screen.get_height() - gojo_size_y, 11.0, 4.5, 4)
 #enemy1 = enemy("sus", "red", gojo_size_x, gojo_size_y, screen.get_width() / 2 - 5 * PPM, screen.get_height() / 2, 50.0, 15.0)
 
-for i in range(5):
-    enemy_clone = enemy("sus", "red", gojo_size_x, gojo_size_y, randint(0, int(screen.get_width() / (2 * PPM))), screen.get_height() / 2, 30.0, 8.0)
+for i in range(3):
+    random_red, random_green, random_blue = randint(0, 255), randint(0, 255), randint(0, 255)
+    enemy_clone = enemy("sus", (random_red, random_green, random_blue), (uniform(0.25, 0.75) * PPM), (uniform(1.0, 2.0) * PPM), randint(0, int(screen.get_width() / 2)), screen.get_height() / 2, 30.0, 8.0)
     enemy_group.add(enemy_clone)
 
 total_time = 0
@@ -251,7 +269,7 @@ while running:
             running = False
         if event.type == pg.KEYDOWN:
             if event.key == pg.K_r:
-                gojo.red(enemy_group)
+                gojo.red(enemy_group, red_force)
     delta_time = clock.tick(60) / 1000
 
     screen.fill("grey")
@@ -264,20 +282,12 @@ while running:
             enemies.last_health = enemies.current_health
         if enemies.current_health <= 0.0:
             enemy_group.remove(enemies)
-            pass
-        gojo.activate_infinity(delta_time, enemies)
-        enemy_velocity.append(abs(enemies.temp_velocity.x))
-        time.append(total_time)
-        #gojo.red(enemy)
-        #print(f"""In infinity: {enemies.in_infinity}\nDistance to gojo (centers): {round(((pg.Vector2(enemies.center_pos).distance_to(pg.Vector2(gojo.center_pos))) / PPM), 3)}
-        #Temp velocity: {round(enemies.temp_velocity, 5)}\nReal velocity: {round(enemies.velocity, 5)}""")
-        #print(f"Temp velocity: {round(enemies.temp_velocity, 5)}, Real velocity: {round(enemies.velocity, 5)}")
-        #print(f"{gojo.get_enemy_dir(enemies)}")
-        #print(f"{}")
+        else:
+            gojo.activate_infinity(delta_time, enemies)
+            #enemy_velocity.append(abs(enemies.temp_velocity.x))
+            #time.append(total_time)
     
     enemy_group.update(delta_time, gojo)
-    
-
     
     screen.blit(gojo.infinity_surface, (gojo.center_pos.x - gojo.infinity_radius / 2, gojo.center_pos.y - gojo.infinity_radius / 2))
     pg.draw.rect(screen, gojo.color, gojo.rect)
@@ -285,11 +295,11 @@ while running:
     pg.display.flip()
     total_time += delta_time
 
-plt.plot(time, enemy_velocity)
-plt.xlabel("Time (seconds)")
-plt.ylabel("Enemy velocity")
-plt.title("Enemy v vs t graph")
+#plt.plot(time, enemy_velocity)
+#plt.xlabel("Time (seconds)")
+#plt.ylabel("Enemy velocity")
+#plt.title("Enemy v vs t graph")
 
 pg.quit()
 
-plt.show()
+#plt.show()

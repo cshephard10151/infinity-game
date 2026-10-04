@@ -148,20 +148,20 @@ class person(pg.sprite.Sprite):
         mult = 3
         dir = self.get_enemy_dir(other)
         if dir.x < 0 and other.velocity.x >= 0:
-            other.velocity.x *= -mult
-            #other.velocity.x += force / other.mass
+            #other.velocity.x *= -mult
+            other.velocity.x -= force / other.mass
         elif dir.x < 0 and other.velocity.x < 0:
-            other.velocity.x *= mult
-            #other.velocity.x -= force / other.mass
+            #other.velocity.x *= mult
+            other.velocity.x -= force / other.mass
         elif dir.x > 0 and other.velocity.x >= 0:
-            other.velocity.x *= mult
-            #other.velocity.x += force / other.mass
+            #other.velocity.x *= mult
+            other.velocity.x += force / other.mass
         elif dir.x > 0 and other.velocity.x < 0:
-            other.velocity.x *= -mult
-            #other.velocity.x -= force / other.mass
+            #other.velocity.x *= -mult
+            other.velocity.x += force / other.mass
         else:
-            other.velocity.x *= mult * 10
-            #other.velocity.x = force * 10 / other.mass
+            #other.velocity.x *= mult * 10
+            other.velocity.x = force * 10 / other.mass
 
     def red(self, others, force):
         if self.move_timers["red"] >= self.move_cooldowns["red"]:
@@ -192,7 +192,20 @@ class enemy(person):
         self.enemytype = ""
         self.in_infinity = False
         self.temp_velocity = self.velocity.copy()
-        self.mass = size_x * size_y * 10.0
+        self.mass = (size_x * size_y * 10.0) / PPM
+
+    def create_random_enemy():
+        width = uniform(0.25, 0.75) * PPM
+        height = uniform(1.0, 2.0) * PPM
+        random_red, random_green, random_blue = randint(0, 255), randint(0, 255), randint(0, 255)
+        startingPos = pg.Vector2(randint(0, int(screen.get_width() - width)), screen.get_height() - height)
+        random_enemy = enemy("sus", #name
+        (random_red, random_green, random_blue), #color
+        width, height,
+        startingPos.x, startingPos.y,#starting x pos
+        9.0, 3.5) #max velocity and acceleration
+
+        return random_enemy
 
     def update_speed(self, dt, other=None):
         types = ("close range", "long range", "sorcerer")
@@ -204,8 +217,10 @@ class enemy(person):
         if not self.in_infinity:
             self.velocity.x += self.acceleration_x * cos(other_dir) * dt
             self.velocity.y += GRAVITY * dt
-        #    self.velocity.x = pg.math.clamp(self.velocity.x, -self.max_speed_x, self.max_speed_x)
             self.temp_velocity = self.velocity.copy()
+            if other.move_timers["red"] > 0.5:
+                self.velocity.x = pg.math.clamp(self.velocity.x, -self.max_speed_x, self.max_speed_x)
+            
 
     def update_pos(self, dt):
         floor = screen.get_height() - self.rect.height
@@ -246,17 +261,15 @@ gojo_size_y = 1.5 * PPM
 gojo_size_x = .46 * PPM
 gojo_name = "Gojo Satoru"
 
-red_force = 100000.0
+red_force = 15000.0
 
 enemy_group = pg.sprite.Group()
 
 gojo = person(gojo_name, "aqua", gojo_size_x, gojo_size_y, screen.get_width() / 2, screen.get_height() - gojo_size_y, 11.0, 4.5, 4)
-#enemy1 = enemy("sus", "red", gojo_size_x, gojo_size_y, screen.get_width() / 2 - 5 * PPM, screen.get_height() / 2, 50.0, 15.0)
 
 for i in range(3):
-    random_red, random_green, random_blue = randint(0, 255), randint(0, 255), randint(0, 255)
-    enemy_clone = enemy("sus", (random_red, random_green, random_blue), (uniform(0.25, 0.75) * PPM), (uniform(1.0, 2.0) * PPM), randint(0, int(screen.get_width() / 2)), screen.get_height() / 2, 30.0, 8.0)
-    enemy_group.add(enemy_clone)
+    enemy_group.add(enemy.create_random_enemy())
+#enemy_group.add(enemy.create_random_enemy())
 
 total_time = 0
 
@@ -270,6 +283,8 @@ while running:
         if event.type == pg.KEYDOWN:
             if event.key == pg.K_r:
                 gojo.red(enemy_group, red_force)
+            if event.key == pg.K_n:
+                enemy_group.add(enemy.create_random_enemy())
     delta_time = clock.tick(60) / 1000
 
     screen.fill("grey")

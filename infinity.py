@@ -53,7 +53,7 @@ class person(pg.sprite.Sprite):
         keys = pg.key.get_pressed()
         if keys[pg.K_a]:
             self.velocity.x -= self.acceleration_x * dt
-        if keys[pg.K_w] or keys[pg.K_SPACE] and on_ground:
+        if (keys[pg.K_w] or keys[pg.K_SPACE]) and on_ground:
             self.velocity.y = -8.0
         if keys[pg.K_d]:
             self.velocity.x += self.acceleration_x * dt

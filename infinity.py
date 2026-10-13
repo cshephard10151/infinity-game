@@ -44,11 +44,15 @@ class person(pg.sprite.Sprite):
         self.infinity_radius = infinity_radius * PPM
         radius = max(1.0, round(self.infinity_radius))
         self.infinity_surface = pg.Surface((self.infinity_radius, self.infinity_radius), pg.SRCALPHA)
-        self.infinity_surface.fill((100, 100, 255, 60))
+        self.infinity_surface.fill((100, 100, 255))
         
-        self.move_timers = {"red": 0.0}
-        self.move_cooldowns = {"red": 2.0}
-        self.move_names = ["red"]
+        self.move_timers = {"red": 0.0, "blue": 0.0}
+        self.move_cooldowns = {"red": 2.0, "blue": 2.0}
+        self.move_names = ["red", "blue"]
+
+        self.red_force = 15000.0
+        self.blue_radius = 7.0
+        self.blue_strength = 10.0
 
     def update_speed(self, dt, keys, other = None):
         on_ground = self.rect.bottom >= screen.get_height()
@@ -103,9 +107,10 @@ class person(pg.sprite.Sprite):
         for name in self.move_names:
             self.move_timers[name] += dt #update move cooldowns
 
-    def activate_infinity(self, dt, keys, other):
+    def activate_infinity(self, keys, other):
 
-        self.infinity_active = keys[pg.K_e]
+    #    self.infinity_active = keys[pg.K_e] #for holding
+        self.infinity_surface.set_alpha(70) if self.infinity_active else self.infinity_surface.set_alpha(20)
 
         dir = self.get_enemy_dir(other)
         if dir.x < 0:
@@ -118,12 +123,11 @@ class person(pg.sprite.Sprite):
         
         if dist <= self.infinity_radius / (2 * PPM) and self.infinity_active:
             other.in_infinity = True
-            self.calculate_infinity_slow_factor(dt, other, dist)
+            self.calculate_infinity_slow_factor(other, dist)
         else:
             other.in_infinity = False
-        #print(f"Dist: {dist}, In infinity: {other.in_infinity}")
 
-    def calculate_infinity_slow_factor(self, dt, other, dist):
+    def calculate_infinity_slow_factor(self, other, dist):
         infinity_radius = self.infinity_radius / PPM
         min_dist = self.get_min_dist(other)
 
@@ -145,38 +149,68 @@ class person(pg.sprite.Sprite):
         return ((self_radius + enemy_radius) / 4) / PPM #change /x to increase/decrease stopping dist
 
     def apply_red_knockback(self, other, force):
-        mult = 3
         dir = self.get_enemy_dir(other)
-        if dir.x < 0 and other.velocity.x >= 0:
-            #other.velocity.x *= -mult
-            other.velocity.x -= force / other.mass
-        elif dir.x < 0 and other.velocity.x < 0:
-            #other.velocity.x *= mult
-            other.velocity.x -= force / other.mass
-        elif dir.x > 0 and other.velocity.x >= 0:
-            #other.velocity.x *= mult
-            other.velocity.x += force / other.mass
-        elif dir.x > 0 and other.velocity.x < 0:
-            #other.velocity.x *= -mult
-            other.velocity.x += force / other.mass
-        else:
-            #other.velocity.x *= mult * 10
-            other.velocity.x = force * 10 / other.mass
+        other.velocity.x += force * dir.x / other.mass
+        other.velocity.y += force * dir.y / other.mass
 
     def red(self, others, force):
-        if self.move_timers["red"] >= self.move_cooldowns["red"]:
+        if self.get_cooldown("red"):
             if isinstance(others, enemy):
                 self.apply_red_knockback(others, force)
             else:
                 for other in others:
                     self.apply_red_knockback(other, force)
         
-            self.move_timers["red"] = 0.0
+            self.restart_cooldown("red")
         else:
-            print(f"Still on cooldown! Remaining time: {round(self.move_cooldowns["red"] - self.move_timers["red"], 2)}s")
+            self.print_cooldown("red")
+
+    def blue(self, mouse, others):
+        mouse_pos = pg.mouse.get_pos()
+        is_push = False
+        if mouse[2]:
+            is_push = True
+        if mouse[0] and mouse[2]:
+            return
+        if (mouse[0] or mouse[2]) and mouse_pos:
+            if isinstance(others, enemy):
+                dist = others.center_pos - mouse_pos.length()
+                dist_magnitude = dist.length()
+                try:
+                    enemy_dir = dist.normalize()
+                    self.apply_blue_pull(others, dist_magnitude, enemy_dir, is_push)
+                except Exception:
+                    return
+            else:
+                for other in others:
+                    dist = other.center_pos - mouse_pos
+                    dist_magnitude = dist.length()
+                    try:
+                        enemy_dir = dist.normalize()
+                        self.apply_blue_pull(other, dist_magnitude, enemy_dir, is_push)
+                    except Exception:
+                        return
+
+    def apply_blue_pull(self, other, dist, dir, is_push = False):
+        if dist <= self.blue_radius * PPM:
+            calc = (dir * self.blue_strength / max(0.1, (self.blue_radius - dist))) * delta_time
+            if is_push: other.velocity += calc 
+            else: other.velocity -= calc
+            
+            
+
+    def get_cooldown(self, name):
+        if self.move_timers[name] >= self.move_cooldowns[name]: return True
+        else: return False
+
+    def restart_cooldown(self, name):
+        self.move_timers[name] = 0.0
+
+    def print_cooldown(self, name):
+        print(f"Still on cooldown! Remaining time: {round(self.move_cooldowns[name] - self.move_timers[name], 2)}s")
 
     def get_enemy_dir(self, other):
-        dir = other.position - self.position
+        dir = other.center_pos - self.center_pos
 
         if dir.length_squared() > 0:
             dir = dir.normalize()
@@ -218,33 +252,34 @@ class enemy(person):
                 elif v_dir < 0: self.velocity.x += v_dir * self.acceleration_x * cos(other_dir) * dt
             else: self.velocity.x += self.acceleration_x * cos(other_dir) * dt
             self.velocity.x = round(self.velocity.x, 3)
-            self.velocity.y += GRAVITY * dt
+            if self.position.y <= screen.get_height() - self.rect.height - 0.1: self.velocity.y += GRAVITY * dt #0.1 is to account for any small errors in calculation
             self.temp_velocity = self.velocity.copy()
             
-            
-
     def update_pos(self, dt):
         floor = screen.get_height() - self.rect.height
+        ceiling = 0
+        right_wall = screen.get_width() - self.rect.width
+        left_wall = 0
 
         self.position.x += self.temp_velocity.x * PPM * dt
         self.position.y += self.temp_velocity.y * PPM * dt
 
         self.position.x = pg.math.clamp(self.position.x, 0, screen.get_width() - self.rect.width)
+        self.position.y = pg.math.clamp(self.position.y, 0, screen.get_height())
 
-        if self.position.y >= floor:
-            self.position.y = floor
-            if self.velocity.y > 0.0:
-                self.velocity.y = 0.0
+        if self.position.y >= floor or self.position.y <= ceiling:
+            if self.position.y <= floor: self.current_health = round(self.current_health - abs(self.velocity.y), 2)
+            if self.position.y <= ceiling: self.position.y = ceiling
+            else: self.position.y = floor #damages based on velocity
+            self.velocity.y = 0.0
 
-        if self.position.x <= 0.0 or self.position.x >= screen.get_width() - self.rect.width:
-            if self.position.x <= 0.0:
-                self.position.x = 0.0
-                self.current_health = round(self.current_health - abs(self.velocity.x), 2)
-            else:
-                self.position.x = screen.get_width() - self.rect.width
-                self.current_health = round(self.current_health - abs(self.velocity.x), 2)
-            self.current_health = pg.math.clamp(self.current_health, 0.0, self.max_health)
+        if self.position.x <= left_wall or self.position.x >= right_wall:
+            self.current_health = round(self.current_health - abs(self.velocity.x), 2) #damages based on velocity
+            if self.position.x <= left_wall: self.position.x = left_wall 
+            else: self.position.x = right_wall
             self.velocity.x = 0.0
+
+        self.current_health = pg.math.clamp(self.current_health, 0.0, self.max_health) #makes sure health is between 0 and max health
 
         self.rect.topleft = self.position
         self.center_pos = pg.Vector2(self.rect.center)
@@ -257,8 +292,6 @@ class enemy(person):
 gojo_size_y = 1.5 * PPM
 gojo_size_x = .46 * PPM
 gojo_name = "Gojo Satoru"
-
-red_force = 15000.0
 
 enemy_group = pg.sprite.Group()
 
@@ -279,16 +312,22 @@ while running:
             running = False
         if event.type == pg.KEYDOWN:
             if event.key == pg.K_r:
-                gojo.red(enemy_group, red_force)
+                gojo.red(enemy_group, gojo.red_force)
             if event.key == pg.K_n:
                 enemy_group.add(enemy.create_random_enemy())
+            if event.key == pg.K_e:
+                if gojo.infinity_active: gojo.infinity_active = False
+                else: gojo.infinity_active = True
+
     delta_time = clock.tick(60) / 1000
 
     keys = pg.key.get_pressed() #for moves and movement
+    mouse = pg.mouse.get_pressed()
 
     screen.fill("grey")
 
     gojo.update(delta_time, keys)
+    gojo.blue(mouse, enemy_group)
 
     for enemies in enemy_group:
         if enemies.last_health != enemies.current_health: 
@@ -297,7 +336,7 @@ while running:
         if enemies.current_health <= 0.0:
             enemy_group.remove(enemies)
         else:
-            gojo.activate_infinity(delta_time, keys, enemies)
+            gojo.activate_infinity(keys, enemies)
             enemy_velocity.append(abs(enemies.temp_velocity.x))
             time.append(total_time)
         #print(f"V_R: {enemies.velocity}, V_C: {enemies.temp_velocity}")
@@ -312,9 +351,10 @@ while running:
 
 plt.plot(time, enemy_velocity)
 plt.xlabel("Time (seconds)")
-plt.ylabel("Enemy velocity")
-plt.title("Enemy v vs t graph")
+plt.ylabel("Enemy speed")
+plt.title("Enemy speed vs t graph")
 
 pg.quit()
 
-plt.show()
+open_graphs = False #change whether or not u want graphs to open at end
+if open_graphs: plt.show()

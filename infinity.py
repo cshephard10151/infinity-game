@@ -107,19 +107,18 @@ class person(pg.sprite.Sprite):
         for name in self.move_names:
             self.move_timers[name] += dt #update move cooldowns
 
-    def activate_infinity(self, keys, other):
-
-    #    self.infinity_active = keys[pg.K_e] #for holding
+    def change_infinity_alpha(self):
         self.infinity_surface.set_alpha(70) if self.infinity_active else self.infinity_surface.set_alpha(20)
 
-        dir = self.get_enemy_dir(other)
-        if dir.x < 0:
-            offset = pg.Vector2(other.rect.bottomright) - pg.Vector2(self.rect.bottomleft)
-        elif dir.x > 0:
-            offset = pg.Vector2(other.rect.bottomleft) - pg.Vector2(self.rect.bottomright)
-        else:
-            offset = pg.Vector2(0, 0)
-        dist = offset.length() / PPM
+    def activate_infinity(self, keys, other = None):
+
+    #    self.infinity_active = keys[pg.K_e] #for holding
+        self.change_infinity_alpha()
+
+        dx = max(self.rect.left - other.rect.right, other.rect.left - self.rect.right, 0)
+        dy = max(self.rect.top - other.rect.bottom, other.rect.top - self.rect.bottom, 0)
+
+        dist = pg.Vector2(dx, dy).length() / PPM
         
         if dist <= self.infinity_radius / (2 * PPM) and self.infinity_active:
             other.in_infinity = True
@@ -149,7 +148,7 @@ class person(pg.sprite.Sprite):
         return ((self_radius + enemy_radius) / 4) / PPM #change /x to increase/decrease stopping dist
 
     def apply_red_knockback(self, other, force):
-        dir = self.get_enemy_dir(other)
+        dir = self.get_enemy_dir_red(other)
         other.velocity.x += force * dir.x / other.mass
         other.velocity.y += force * dir.y / other.mass
 
@@ -174,6 +173,7 @@ class person(pg.sprite.Sprite):
             return
         if (mouse[0] or mouse[2]) and mouse_pos:
             if isinstance(others, enemy):
+                if others.in_infinity: return
                 dist = others.center_pos - mouse_pos.length()
                 dist_magnitude = dist.length()
                 try:
@@ -183,6 +183,7 @@ class person(pg.sprite.Sprite):
                     return
             else:
                 for other in others:
+                    if other.in_infinity: return
                     dist = other.center_pos - mouse_pos
                     dist_magnitude = dist.length()
                     try:
@@ -192,9 +193,10 @@ class person(pg.sprite.Sprite):
                         return
 
     def apply_blue_pull(self, other, dist, dir, is_push = False):
+        multiplier = 2.0 #change for stronger / weaker
         if dist <= self.blue_radius * PPM:
-            calc = (dir * self.blue_strength / max(0.1, (self.blue_radius - dist))) * delta_time
-            if is_push: other.velocity += calc 
+            calc = (dir * self.blue_strength * multiplier / max(0.1, (self.blue_radius - dist))) * delta_time
+            if is_push: other.velocity += calc
             else: other.velocity -= calc
             
             
@@ -216,6 +218,14 @@ class person(pg.sprite.Sprite):
             dir = dir.normalize()
 
         return dir
+
+    def get_enemy_dir_red(self, other):
+            dir = pg.Vector2(other.rect.midbottom) - pg.Vector2(self.rect.midbottom)
+    
+            if dir.length_squared() > 0:
+                dir = dir.normalize()
+    
+            return dir
 
 class enemy(person):
     def __init__(self, name, color, size_x, size_y, start_x, start_y, max_speed, accel, health = 100.0):
@@ -319,15 +329,16 @@ while running:
                 if gojo.infinity_active: gojo.infinity_active = False
                 else: gojo.infinity_active = True
 
-    delta_time = clock.tick(60) / 1000
+    delta_time = clock.tick(120) / 1000 #change for higher/lower framerate
 
     keys = pg.key.get_pressed() #for moves and movement
     mouse = pg.mouse.get_pressed()
 
     screen.fill("grey")
 
+    
     gojo.update(delta_time, keys)
-    gojo.blue(mouse, enemy_group)
+    
 
     for enemies in enemy_group:
         if enemies.last_health != enemies.current_health: 
@@ -337,10 +348,13 @@ while running:
             enemy_group.remove(enemies)
         else:
             gojo.activate_infinity(keys, enemies)
-            enemy_velocity.append(abs(enemies.temp_velocity.x))
+            gojo.blue(mouse, enemy_group)
+            enemy_velocity.append(abs(enemies.temp_velocity.length()))
             time.append(total_time)
+            print(enemies.velocity)
         #print(f"V_R: {enemies.velocity}, V_C: {enemies.temp_velocity}")
-    
+    gojo.change_infinity_alpha()
+
     enemy_group.update(delta_time, gojo)
     
     screen.blit(gojo.infinity_surface, (gojo.center_pos.x - gojo.infinity_radius / 2, gojo.center_pos.y - gojo.infinity_radius / 2))
@@ -356,5 +370,5 @@ plt.title("Enemy speed vs t graph")
 
 pg.quit()
 
-open_graphs = False #change whether or not u want graphs to open at end
+open_graphs = True #change whether or not u want graphs to open at end
 if open_graphs: plt.show()

@@ -1,7 +1,7 @@
 import pygame as pg
 from math import atan2, cos
 from random import randint, uniform
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 pg.init()
 
@@ -351,7 +351,7 @@ while running:
             gojo.blue(mouse, enemy_group)
             enemy_velocity.append(abs(enemies.temp_velocity.length()))
             time.append(total_time)
-            print(enemies.velocity)
+            #print(enemies.velocity)
         #print(f"V_R: {enemies.velocity}, V_C: {enemies.temp_velocity}")
     gojo.change_infinity_alpha()
 
@@ -363,12 +363,12 @@ while running:
     pg.display.flip()
     total_time += delta_time
 
-plt.plot(time, enemy_velocity)
-plt.xlabel("Time (seconds)")
-plt.ylabel("Enemy speed")
-plt.title("Enemy speed vs t graph")
+#plt.plot(time, enemy_velocity)
+#plt.xlabel("Time (seconds)")
+#plt.ylabel("Enemy speed")
+#plt.title("Enemy speed vs t graph")
 
 pg.quit()
 
-open_graphs = True #change whether or not u want graphs to open at end
-if open_graphs: plt.show()
+open_graphs = False #change whether or not u want graphs to open at end
+#if open_graphs: plt.show()

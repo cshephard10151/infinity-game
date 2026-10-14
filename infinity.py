@@ -9,6 +9,7 @@ PPM = 50 #pixels per meter
 GRAVITY = 9.81
 
 font = pg.font.SysFont("Arial", 24)
+small_font = pg.font.SysFont("Arial", 12)
 
 screen = pg.display.set_mode((21 * PPM, 16 * PPM))
 clock = pg.time.Clock()
@@ -328,9 +329,6 @@ while running:
 
     #enemy_group.add(enemy.create_random_enemy())
     for enemies in enemy_group:
-        if enemies.last_health != enemies.current_health: 
-            print(f"Enemy health: {enemies.current_health}")
-            enemies.last_health = enemies.current_health
         if enemies.current_health <= 0.0:
             enemy_group.remove(enemies)
         else:
@@ -347,10 +345,11 @@ while running:
     screen.blit(gojo.infinity_surface, (gojo.center_pos.x - gojo.infinity_radius / 2, gojo.center_pos.y - gojo.infinity_radius / 2))
     pg.draw.rect(screen, gojo.color, gojo.rect)
     enemy_group.draw(screen)
+    for enemies in enemy_group:
+        enemy_health = small_font.render(f"{enemies.current_health}", True, "black")
+        screen.blit(enemy_health, (pg.Vector2(enemies.rect.midtop).x - 13.0, pg.Vector2(enemies.rect.midtop).y - 17.5))
     fps = font.render(f"FPS: {clock.get_fps(): .1f}", True, "black")
-    enemy_number = font.render(f"Enemy count: {len(enemy_group)}", True, "black")
     screen.blit(fps, (10, 10))
-    screen.blit(enemy_number, (10, 25))
     pg.display.flip()
     total_time += delta_time
 

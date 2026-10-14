@@ -6,8 +6,9 @@ from random import randint, uniform
 pg.init()
 
 PPM = 50 #pixels per meter
-
 GRAVITY = 9.81
+
+font = pg.font.SysFont("Arial", 24)
 
 screen = pg.display.set_mode((21 * PPM, 16 * PPM))
 clock = pg.time.Clock()
@@ -154,11 +155,8 @@ class person(pg.sprite.Sprite):
 
     def red(self, others, force):
         if self.get_cooldown("red"):
-            if isinstance(others, enemy):
-                self.apply_red_knockback(others, force)
-            else:
-                for other in others:
-                    self.apply_red_knockback(other, force)
+            for other in others:
+                self.apply_red_knockback(other, force)
         
             self.restart_cooldown("red")
         else:
@@ -172,25 +170,15 @@ class person(pg.sprite.Sprite):
         if mouse[0] and mouse[2]:
             return
         if (mouse[0] or mouse[2]) and mouse_pos:
-            if isinstance(others, enemy):
-                if others.in_infinity: return
-                dist = others.center_pos - mouse_pos.length()
+            for other in others:
+                if other.in_infinity: return
+                dist = other.center_pos - mouse_pos
                 dist_magnitude = dist.length()
                 try:
                     enemy_dir = dist.normalize()
-                    self.apply_blue_pull(others, dist_magnitude, enemy_dir, is_push)
+                    self.apply_blue_pull(other, dist_magnitude, enemy_dir, is_push)
                 except Exception:
                     return
-            else:
-                for other in others:
-                    if other.in_infinity: return
-                    dist = other.center_pos - mouse_pos
-                    dist_magnitude = dist.length()
-                    try:
-                        enemy_dir = dist.normalize()
-                        self.apply_blue_pull(other, dist_magnitude, enemy_dir, is_push)
-                    except Exception:
-                        return
 
     def apply_blue_pull(self, other, dist, dir, is_push = False):
         multiplier = 2.0 #change for stronger / weaker
@@ -336,10 +324,9 @@ while running:
 
     screen.fill("grey")
 
-    
     gojo.update(delta_time, keys)
-    
 
+    #enemy_group.add(enemy.create_random_enemy())
     for enemies in enemy_group:
         if enemies.last_health != enemies.current_health: 
             print(f"Enemy health: {enemies.current_health}")
@@ -360,6 +347,10 @@ while running:
     screen.blit(gojo.infinity_surface, (gojo.center_pos.x - gojo.infinity_radius / 2, gojo.center_pos.y - gojo.infinity_radius / 2))
     pg.draw.rect(screen, gojo.color, gojo.rect)
     enemy_group.draw(screen)
+    fps = font.render(f"FPS: {clock.get_fps(): .1f}", True, "black")
+    enemy_number = font.render(f"Enemy count: {len(enemy_group)}", True, "black")
+    screen.blit(fps, (10, 10))
+    screen.blit(enemy_number, (10, 25))
     pg.display.flip()
     total_time += delta_time
 

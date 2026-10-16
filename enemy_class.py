@@ -3,8 +3,6 @@ import pygame as pg
 from random import randint, uniform
 from math import atan2, cos
 
-print("person is a class:", isinstance(person, type))
-
 PPM = 50 #pixels per meter
 GRAVITY = 9.81
 
@@ -61,8 +59,8 @@ class enemy(person):
         self.position.y = pg.math.clamp(self.position.y, 0, screen.get_height())
 
         if self.position.y >= floor or self.position.y <= ceiling:
-            if self.position.y <= floor: self.current_health = round(self.current_health - abs(self.velocity.y), 2)
-            if self.position.y <= ceiling: self.position.y = ceiling
+            if self.position.y <= ceiling: self.current_health = round(self.current_health - abs(self.velocity.y), 2)
+            if self.position.y >= floor: self.position.y = floor
             else: self.position.y = floor #damages based on velocity
             self.velocity.y = 0.0
 

@@ -162,7 +162,7 @@ class person(pg.sprite.Sprite):
             return
         if (mouse[0] or mouse[2]) and mouse_pos:
             for other in others:
-                if other.in_infinity: return
+                #if other.in_infinity: return
                 dist = other.center_pos - mouse_pos
                 dist_magnitude = dist.length()
                 try:
@@ -175,9 +175,11 @@ class person(pg.sprite.Sprite):
         multiplier = 2.0 #change for stronger / weaker
         if is_push: multiplier = 0.6
         if dist <= self.blue_radius * PPM:
-            calc = (dir * self.blue_strength * multiplier / max(0.1, (self.blue_radius - dist))) * dt
-            if is_push: other.velocity += calc
-            else: other.velocity -= calc
+            if other.in_infinity: multiplier = .05 #if in infinity, velocity will build much slower
+            calc = (dir * self.blue_strength * multiplier / max(0.07, (self.blue_radius - dist))) * dt
+
+            if is_push: other.velocity += calc #pushes
+            else: other.velocity -= calc #pulls
             
             
 

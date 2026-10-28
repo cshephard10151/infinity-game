@@ -61,7 +61,6 @@ class enemy(person):
         if self.position.y >= floor or self.position.y <= ceiling:
             if self.position.y <= ceiling: self.current_health = round(self.current_health - abs(self.velocity.y), 2)
             if self.position.y >= floor: self.position.y = floor
-            else: self.position.y = floor #damages based on velocity
             self.velocity.y = 0.0
 
         if self.position.x <= left_wall or self.position.x >= right_wall:
